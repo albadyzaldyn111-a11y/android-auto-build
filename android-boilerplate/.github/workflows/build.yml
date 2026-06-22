@@ -1,0 +1,61 @@
+name: Android CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - 'v*' # Creates a GitHub Release on version tags (e.g. v1.0.0)
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: # Enable manual triggers
+
+jobs:
+  build:
+    name: Build & Release Android APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to publish releases
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4' # Ensures Gradle is installed even if gradlew wrapper files are missing
+
+      - name: Make Gradle Executable
+        run: chmod +x gradlew
+        continue-on-error: true
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/app-release.apk
+          name: Release ${{ github.ref_name }}
+          body: |
+            Automated Build for version ${{ github.ref_name }}.
+            
+            Download the signed production-ready `app-release.apk` below!
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
